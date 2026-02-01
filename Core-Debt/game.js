@@ -1,4 +1,4 @@
-/* js/game.js */
+/* Core-Debt/game.js */
 let world = document.getElementById("world");
 const ctx = world.getContext("2d");
 const GRID_SIZE = 40;
@@ -558,7 +558,6 @@ function winGame() {
   isPaused = true;
   if (loopId) cancelAnimationFrame(loopId);
 
-  // New Content requested by user
   const msg = `
         <h1 style="color:#f1c40f; font-size:40px; text-shadow:0 0 20px #f1c40f">World Saved</h1>
         <p style="font-size:20px; margin: 20px 0;">You have defeated the God.</p>
@@ -568,13 +567,14 @@ function winGame() {
   document.getElementById('message-text').innerHTML = msg;
   document.getElementById('modal-overlay').style.display = 'flex';
   document.getElementById('message-box').style.display = 'block';
-  document.getElementById('msg-btn').style.display = 'none'; // Hide standard button
+  document.getElementById('msg-btn').style.display = 'none'; // Ocultamos el botón normal
   document.getElementById('upgrade-container').style.display = 'none';
   document.getElementById('typing-display').style.display = 'none';
 
-  // Logic for the new button
+  // Lógica del nuevo botón
+  // CORREGIDO: Redirige a Core-Debt/ending.html (relativo a index.html)
   document.getElementById('finish-him-btn').onclick = function() {
-    window.location.href = "ending.html";
+    window.location.href = "Core-Debt/ending.html";
   };
 }
 

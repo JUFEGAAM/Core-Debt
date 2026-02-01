@@ -4,19 +4,18 @@
 <head>
   <meta charset="UTF-8">
   <title>THE END?</title>
+  <link rel="stylesheet" href="style.css">
   <style>
+    /* Estilos extra para centrar todo en la pantalla final */
     body {
-      margin: 0;
-      padding: 0;
-      background-color: #050a14;
-      color: #eee;
-      font-family: 'Segoe UI', Tahoma, sans-serif;
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
       height: 100vh;
       text-align: center;
+      /* Sobrescribimos overflow del juego para que no haya problemas */
+      overflow: auto;
     }
 
     h1 {
@@ -46,6 +45,7 @@
       border-radius: 4px;
       text-transform: uppercase;
       text-decoration: none;
+      display: inline-block;
     }
 
     .btn-restart:hover {
@@ -71,7 +71,7 @@
     YOU HAVE NO LIFE BUT YOU FINISHED THIS GAME, NOW YOU WILL SUCCEED IN YOUR LIFE GO DO THE THINGS YOU HAVEN'T
   </p>
 
-  <a href="index.html" class="btn-restart">GO BACK TO START</a>
+  <a href="../index.html" class="btn-restart">GO BACK TO START</a>
 
   <div class="credits">
     made by JUFEGAAM
