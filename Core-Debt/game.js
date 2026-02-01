@@ -1,10 +1,9 @@
-/* Core-Debt/game.js */
+/* js/game.js */
 let world = document.getElementById("world");
 const ctx = world.getContext("2d");
 const GRID_SIZE = 40;
 const FINAL_MISSION = 67;
 
-// Colors and Resources
 const RESOURCES = {
   WOOD: { id: 'wood', color: '#8B4513', name: 'Wood' },
   IRON: { id: 'iron', color: '#4b4b4b', name: 'Iron' },
@@ -17,6 +16,7 @@ let gameStarted = false;
 let camera = { x: 0, y: 0 };
 let zoom = 1.0;
 let isPaused = true;
+let isMenuOpen = false; // Nueva variable para controlar el menú de pausa
 let shakeOffset = { x: 0, y: 0 };
 let loopId = null;
 
@@ -70,6 +70,71 @@ const BOSS_TAUNTS = {
 };
 const TECH_WORDS = ["SYSTEM", "CORE", "ERROR", "VIRUS", "DATA", "CODE", "HACK", "BIOS", "ROOT", "NULL", "VOID", "FATAL", "CRASH", "DUMP", "LOG"];
 
+/* === NUEVAS FUNCIONES DE MENÚ Y EXPORTACIÓN === */
+
+function togglePauseMenu() {
+    if (!gameStarted) return;
+    isMenuOpen = !isMenuOpen;
+    isPaused = isMenuOpen;
+    document.getElementById('pause-overlay').style.display = isMenuOpen ? 'flex' : 'none';
+}
+
+function exportSave() {
+    const saveData = {
+        player: player,
+        mission: {
+            totalCompleted: mission.totalCompleted,
+            difficulty: mission.difficulty
+        },
+        version: "1.0"
+    };
+    
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveData));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `core_debt_save_lvl${mission.totalCompleted}.txt`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+}
+
+function triggerImport() {
+    document.getElementById('import-input').click();
+}
+
+function importSave(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const loadedData = JSON.parse(e.target.result);
+            player = loadedData.player;
+            mission.totalCompleted = loadedData.mission.totalCompleted;
+            mission.difficulty = loadedData.mission.difficulty;
+            
+            // Reiniciar estado visual
+            isMenuOpen = false;
+            isPaused = false;
+            gameStarted = true;
+            document.getElementById('pause-overlay').style.display = 'none';
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('modal-overlay').style.display = 'none';
+            
+            initWorld();
+            updateUI();
+            nextMission();
+            spawnFloatingText(0, 0, "SAVE LOADED!", "#27ae60");
+        } catch (err) {
+            alert("Error loading file. Make sure it's a valid Core-Debt save.");
+        }
+    };
+    reader.readAsText(file);
+}
+
+/* === LÓGICA DE JUEGO ACTUALIZADA === */
+
 function startGame(startLevel) {
   document.getElementById('start-screen').style.display = 'none';
   gameStarted = true;
@@ -78,8 +143,6 @@ function startGame(startLevel) {
 }
 
 function initGame(startLevel = 0) {
-  if (loopId) cancelAnimationFrame(loopId);
-
   resize();
   initWorld();
   mission.totalCompleted = startLevel;
@@ -94,13 +157,13 @@ function initGame(startLevel = 0) {
   const introMsg = startLevel > 0
     ? `HARD MODE: LEVEL ${startLevel}.<br>BOSS INCOMING!`
     : "CORE DEBT: HARD MODE.<br><br>Move with right click.<br>Farm everything you can.<br>And survive all 67 levels.";
+  
   showMessage(introMsg, () => {
     if (startLevel > 0 && (startLevel % 5 === 0 || startLevel === 67) && startLevel !== 0) {
       spawnBoss();
     } else {
       nextMission();
     }
-    gameLoop();
   });
 }
 
@@ -244,7 +307,6 @@ function spawnBoss() {
 
   updateBossUI();
   spawnFloatingText(0, -150, "BOSS SPAWNED!", "#f00");
-  draw();
 }
 
 function clickBoss() {
@@ -331,27 +393,26 @@ function activateMinigameLogic() {
   boss.immune = false;
   boss.minigameActive = true;
   const wordEl = document.getElementById('minigame-word');
-
   const level = mission.totalCompleted;
 
   if (boss.minigameType === 'AIM') {
     const targets = Math.min(6, 4 + Math.floor(level / 10));
     spawnAimTargets(targets);
-    boss.minigameMaxTimer = Math.max(4.5, 7.0 - (level * 0.05));
+    boss.minigameMaxTimer = Math.max(4.6, 7.5 - (level * 0.05)); 
     updateMinigameText("CLICK TARGETS");
     wordEl.style.display = "none";
     triggerBossTaunt("AIM");
 
   } else if (boss.minigameType === 'WORD') {
     boss.wordsRemaining = 3 + Math.floor(level / 15);
-    boss.minigameMaxTimer = Math.max(2.0, 4.5 - (level * 0.03));
+    boss.minigameMaxTimer = Math.max(2.2, 4.8 - (level * 0.03));
     nextBossWord();
     wordEl.style.display = "inline-block";
     triggerBossTaunt("TYPE");
 
   } else {
     boss.wordsRemaining = 5 + Math.floor(level / 10);
-    boss.minigameMaxTimer = Math.max(2.0, 5.5 - (level * 0.05));
+    boss.minigameMaxTimer = Math.max(2.2, 5.6 - (level * 0.05));
     nextBossDirection();
     wordEl.style.display = "inline-block";
     triggerBossTaunt("DIR");
@@ -428,6 +489,12 @@ function checkBossTimer(dt) {
 }
 
 window.addEventListener('keydown', (e) => {
+  // Tecla Escape para pausar y menú
+  if (e.key === 'Escape') {
+    togglePauseMenu();
+    return;
+  }
+
   if (isUpgradeMenuOpen) {
     handleUpgradeTyping(e);
     return;
@@ -551,9 +618,6 @@ function killBoss() {
   setTimeout(() => { queueUpgrade("Boss Defeated Reward"); }, 1500);
 }
 
-// ==========================================
-// MODIFIED VICTORY SCREEN / FINAL FLOW
-// ==========================================
 function winGame() {
   isPaused = true;
   if (loopId) cancelAnimationFrame(loopId);
@@ -567,14 +631,12 @@ function winGame() {
   document.getElementById('message-text').innerHTML = msg;
   document.getElementById('modal-overlay').style.display = 'flex';
   document.getElementById('message-box').style.display = 'block';
-  document.getElementById('msg-btn').style.display = 'none'; // Ocultamos el botón normal
+  document.getElementById('msg-btn').style.display = 'none'; 
   document.getElementById('upgrade-container').style.display = 'none';
   document.getElementById('typing-display').style.display = 'none';
 
-  // Lógica del nuevo botón
-  // CORREGIDO: Redirige a Core-Debt/ending.html (relativo a index.html)
   document.getElementById('finish-him-btn').onclick = function() {
-    window.location.href = "Core-Debt/ending.html";
+    window.location.href = "ending.html";
   };
 }
 
@@ -834,12 +896,27 @@ function failMission() {
   if (player.hp <= 0) showMessage("GAME OVER", () => location.reload());
   else showMessage("TOO SLOW.<br>-1 HP", () => { nextMission(); });
 }
+
 function nextMission() {
   const types = ['wood', 'wood', 'copper', 'iron', 'silver', 'gold'];
   let maxIdx = Math.min(Math.floor(mission.difficulty / 2) + 1, types.length);
   const nextType = types[Math.floor(Math.random() * maxIdx)];
-  startMission(nextType, 5 + (mission.difficulty * 3), Math.max(15, 30 - (mission.difficulty * 1)));
+
+  // --- CONFIGURACIÓN DE TIEMPO AJUSTADA ---
+  const tiempoInicial = 25;      
+  const tiempoMinimo = 13;       
+  const reduccionPorNivel = 0.18; 
+
+  const tiempoCalculado = tiempoInicial - (mission.totalCompleted * reduccionPorNivel);
+  const tiempoFinal = Math.max(tiempoMinimo, tiempoCalculado);
+
+  // --- RECURSOS: Escalado incremental agresivo para niveles altos ---
+  // Fórmula: Base (5) + Crecimiento lineal (Nivel*5) + Exponencial suave (Nivel^1.4 * 0.2)
+  const cantidadRecursos = Math.floor(5 + mission.totalCompleted * 5 + Math.pow(mission.totalCompleted, 1.4) * 0.2);
+
+  startMission(nextType, cantidadRecursos, tiempoFinal);
 }
+
 function mineAt(wx, wy) {
   if (player.currentLoad >= player.capacity) {
     spawnFloatingText(wx, wy, "FULL!", "#e17055");
@@ -1085,7 +1162,7 @@ window.addEventListener('mousedown', e => {
     world.style.cursor = "grabbing";
   }
   else if (e.button === 0) {
-    if (isUpgradeMenuOpen || document.getElementById('start-screen').style.display !== 'none') {
+    if (isUpgradeMenuOpen || isMenuOpen || document.getElementById('start-screen').style.display !== 'none') {
       return;
     }
     const mx = e.clientX;
@@ -1109,5 +1186,6 @@ window.addEventListener('mousedown', e => {
 });
 window.addEventListener('mouseup', () => { isDragging = false; });
 window.addEventListener('wheel', e => { zoom = Math.min(Math.max(zoom - e.deltaY * 0.001, 0.4), 1.6); }, { passive: false });
+
 resize();
 requestAnimationFrame(gameLoop);
