@@ -12,6 +12,10 @@
     <h1 class="title-main">CORE-DEBT</h1>
     <p class="subtitle">HARD MODE</p>
     <button class="btn-start" onclick="startGame(0)">START GAME</button>
+    
+    <button class="btn-start" onclick="triggerImport()" style="border-color: #27ae60; color: #27ae60; margin-top: 10px;">LOAD GAME</button>
+    
+    <input type="file" id="import-input" style="display: none;" accept=".txt" onchange="importSave(event)">
 
     <div style="font-size:12px; color:#555; margin-bottom:5px; margin-top: 20px;">DEV ZONE</div>
     <div class="dev-controls">
@@ -78,12 +82,19 @@
       <div id="xp-fill"></div>
       <div id="xp-text">0 / 100 XP</div>
     </div>
+    
+    <div id="btn-save" onclick="exportSave()" onmouseenter="showSaveTooltip()" onmouseleave="hideSaveTooltip()">
+        💾
+    </div>
+    <div id="save-tooltip">Click to Save & Download</div>
+
     <div id="trash-can" oncontextmenu="emptyInventory(); return false;" onmouseenter="showTooltip()"
       onmouseleave="hideTooltip()">
       🗑️
     </div>
     <div id="trash-tooltip">Right-Click to Empty Trash</div>
   </div>
+
   <div id="modal-overlay">
     <div id="message-box">
       <div id="message-text"></div>
@@ -94,23 +105,8 @@
       <span class="pending-part">TYPE TO SELECT</span><span class="cursor">_</span>
     </div>
   </div>
-  <div id="pause-overlay" class="modal-overlay" style="display: none; z-index: 10000;">
-    <div class="message-box" style="text-align: center;">
-        <h1 style="color: #48dbfb; font-size: 40px; margin-bottom: 20px;">CORE-DEBT</h1>
-        <h2 style="color: #fff; margin-bottom: 30px;">PAUSE</h2>
-        
-        <div style="display: flex; flex-direction: column; gap: 15px;">
-            <button class="msg-btn" onclick="togglePauseMenu()">RESUME</button>
-            <button class="msg-btn" onclick="exportSave()" style="background: #27ae60;">EXPORT SAVE (.txt)</button>
-            <button class="msg-btn" onclick="triggerImport()" style="background: #2980b9;">IMPORT SAVE</button>
-        </div>
-        
-        <input type="file" id="import-input" style="display: none;" accept=".txt" onchange="importSave(event)">
-    </div>
-</div>
+  
   <canvas id="world"></canvas>
-
   <script src="Core-Debt/game.js"></script>
 </body>
-
 </html>

@@ -16,7 +16,6 @@ let gameStarted = false;
 let camera = { x: 0, y: 0 };
 let zoom = 1.0;
 let isPaused = true;
-let isMenuOpen = false; // Nueva variable para controlar el menú de pausa
 let shakeOffset = { x: 0, y: 0 };
 let loopId = null;
 
@@ -70,70 +69,70 @@ const BOSS_TAUNTS = {
 };
 const TECH_WORDS = ["SYSTEM", "CORE", "ERROR", "VIRUS", "DATA", "CODE", "HACK", "BIOS", "ROOT", "NULL", "VOID", "FATAL", "CRASH", "DUMP", "LOG"];
 
-/* === NUEVAS FUNCIONES DE MENÚ Y EXPORTACIÓN === */
+/* === SAVE SYSTEM FUNCTIONS === */
 
-function togglePauseMenu() {
-    if (!gameStarted) return;
-    isMenuOpen = !isMenuOpen;
-    isPaused = isMenuOpen;
-    document.getElementById('pause-overlay').style.display = isMenuOpen ? 'flex' : 'none';
-}
+function showSaveTooltip() { document.getElementById('save-tooltip').style.display = 'block'; }
+function hideSaveTooltip() { document.getElementById('save-tooltip').style.display = 'none'; }
 
 function exportSave() {
-    const saveData = {
-        player: player,
-        mission: {
-            totalCompleted: mission.totalCompleted,
-            difficulty: mission.difficulty
-        },
-        version: "1.0"
-    };
-    
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveData));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `core_debt_save_lvl${mission.totalCompleted}.txt`);
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
+  if (!gameStarted) return;
+  
+  const saveData = {
+    player: player,
+    level: mission.totalCompleted,
+    date: new Date().toLocaleString(),
+    version: "1.0"
+  };
+
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveData));
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href", dataStr);
+  downloadAnchorNode.setAttribute("download", `CoreDebt_Lvl${mission.totalCompleted}_Save.txt`);
+  document.body.appendChild(downloadAnchorNode);
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+
+  spawnFloatingText(0, 0, "GAME SAVED!", "#27ae60");
 }
 
 function triggerImport() {
-    document.getElementById('import-input').click();
+  document.getElementById('import-input').click();
 }
 
 function importSave(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const loadedData = JSON.parse(e.target.result);
-            player = loadedData.player;
-            mission.totalCompleted = loadedData.mission.totalCompleted;
-            mission.difficulty = loadedData.mission.difficulty;
-            
-            // Reiniciar estado visual
-            isMenuOpen = false;
-            isPaused = false;
-            gameStarted = true;
-            document.getElementById('pause-overlay').style.display = 'none';
-            document.getElementById('start-screen').style.display = 'none';
-            document.getElementById('modal-overlay').style.display = 'none';
-            
-            initWorld();
-            updateUI();
-            nextMission();
-            spawnFloatingText(0, 0, "SAVE LOADED!", "#27ae60");
-        } catch (err) {
-            alert("Error loading file. Make sure it's a valid Core-Debt save.");
-        }
-    };
-    reader.readAsText(file);
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const loadedData = JSON.parse(e.target.result);
+      
+      if (loadedData.player && typeof loadedData.level === 'number') {
+        startGameWithSave(loadedData);
+      } else {
+        alert("Invalid Save File!");
+      }
+    } catch (err) {
+      alert("Error reading file: " + err);
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
 }
 
-/* === LÓGICA DE JUEGO ACTUALIZADA === */
+function startGameWithSave(data) {
+  document.getElementById('start-screen').style.display = 'none';
+  gameStarted = true;
+  isPaused = false;
+  
+  initGame(data.level);
+  player = data.player;
+  updateUI();
+  spawnFloatingText(0, -200, "GAME LOADED!", "#27ae60");
+}
+
+/* === MAIN LOGIC === */
 
 function startGame(startLevel) {
   document.getElementById('start-screen').style.display = 'none';
@@ -143,10 +142,13 @@ function startGame(startLevel) {
 }
 
 function initGame(startLevel = 0) {
+  if (loopId) cancelAnimationFrame(loopId);
+
   resize();
   initWorld();
   mission.totalCompleted = startLevel;
   mission.difficulty = Math.floor(startLevel / 5);
+  
   if (startLevel > 0) {
     player.power = 1.0 + (startLevel * 0.5);
     player.capacity = 20 + (startLevel * 2);
@@ -164,6 +166,7 @@ function initGame(startLevel = 0) {
     } else {
       nextMission();
     }
+    gameLoop();
   });
 }
 
@@ -259,6 +262,8 @@ function completeMission() {
   }
 }
 
+// === BOSS SPAWN (TIEMPOS AJUSTADOS LEVEMENTE) ===
+// He subido unos 0.5s - 1.0s los tiempos base del boss para dar un respiro
 function spawnBoss() {
   boss.active = true;
   boss.immune = false;
@@ -274,17 +279,19 @@ function spawnBoss() {
   if (mission.totalCompleted === 67) {
     boss.type = "GOD";
     boss.maxHp = 2500;
-    boss.maxTimer = 18.0;
+    boss.maxTimer = 17.0; // Antes 16.0
     document.getElementById('boss-title').style.color = "#f1c40f";
   } else if (mission.totalCompleted % 10 === 0) {
     boss.type = "DEMIGOD";
     boss.maxHp = (40 + (mission.totalCompleted * 10)) * 2.0;
-    boss.maxTimer = Math.max(9.0, 12.0 - (mission.totalCompleted * 0.1));
+    // Antes 8.0 y 11.0 -> Ahora 8.5 y 11.5
+    boss.maxTimer = Math.max(8.5, 11.5 - (mission.totalCompleted * 0.12)); 
     document.getElementById('boss-title').style.color = "#e74c3c";
   } else {
     boss.type = "MINION";
     boss.maxHp = 30 + (mission.totalCompleted * 8);
-    boss.maxTimer = Math.max(8.0, 11.0 - (mission.totalCompleted * 0.1));
+    // Antes 7.0 y 10.0 -> Ahora 7.5 y 10.5
+    boss.maxTimer = Math.max(7.5, 10.5 - (mission.totalCompleted * 0.12));
     document.getElementById('boss-title').style.color = "#e67e22";
   }
 
@@ -307,6 +314,8 @@ function spawnBoss() {
 
   updateBossUI();
   spawnFloatingText(0, -150, "BOSS SPAWNED!", "#f00");
+
+  draw();
 }
 
 function clickBoss() {
@@ -389,30 +398,39 @@ function startMinigameCountdown(newPhase) {
   }, 800);
 }
 
+// === MINIGAMES LOGIC (RELAJADO UN POQUITO EL ESTRÉS) ===
+// He subido unos 0.2s - 0.3s los tiempos mínimos y base.
 function activateMinigameLogic() {
   boss.immune = false;
   boss.minigameActive = true;
   const wordEl = document.getElementById('minigame-word');
+
   const level = mission.totalCompleted;
 
   if (boss.minigameType === 'AIM') {
     const targets = Math.min(6, 4 + Math.floor(level / 10));
     spawnAimTargets(targets);
-    boss.minigameMaxTimer = Math.max(4.6, 7.5 - (level * 0.05)); 
+
+    // AIM: Antes Max(3.8, 7.0) -> Ahora Max(4.0, 7.2)
+    boss.minigameMaxTimer = Math.max(4.0, 7.2 - (level * 0.06));
     updateMinigameText("CLICK TARGETS");
     wordEl.style.display = "none";
     triggerBossTaunt("AIM");
 
   } else if (boss.minigameType === 'WORD') {
     boss.wordsRemaining = 3 + Math.floor(level / 15);
-    boss.minigameMaxTimer = Math.max(2.2, 4.8 - (level * 0.03));
+
+    // WORD: Antes Max(1.8, 4.2) -> Ahora Max(2.0, 4.4)
+    boss.minigameMaxTimer = Math.max(2.0, 4.4 - (level * 0.04));
     nextBossWord();
     wordEl.style.display = "inline-block";
     triggerBossTaunt("TYPE");
 
   } else {
     boss.wordsRemaining = 5 + Math.floor(level / 10);
-    boss.minigameMaxTimer = Math.max(2.2, 5.6 - (level * 0.05));
+
+    // DIR: Antes Max(1.8, 5.0) -> Ahora Max(2.0, 5.2)
+    boss.minigameMaxTimer = Math.max(2.0, 5.2 - (level * 0.06));
     nextBossDirection();
     wordEl.style.display = "inline-block";
     triggerBossTaunt("DIR");
@@ -489,12 +507,6 @@ function checkBossTimer(dt) {
 }
 
 window.addEventListener('keydown', (e) => {
-  // Tecla Escape para pausar y menú
-  if (e.key === 'Escape') {
-    togglePauseMenu();
-    return;
-  }
-
   if (isUpgradeMenuOpen) {
     handleUpgradeTyping(e);
     return;
@@ -621,23 +633,18 @@ function killBoss() {
 function winGame() {
   isPaused = true;
   if (loopId) cancelAnimationFrame(loopId);
-
   const msg = `
-        <h1 style="color:#f1c40f; font-size:40px; text-shadow:0 0 20px #f1c40f">World Saved</h1>
-        <p style="font-size:20px; margin: 20px 0;">You have defeated the God.</p>
-        <button id="finish-him-btn" style="margin-top:20px; background:#e74c3c; color:#fff; padding: 15px 30px; border:none; border-radius:4px; font-weight:bold; cursor:pointer; font-size:20px;">FINISH HIM</button>
-    `;
-
+            <h1 style="color:#f1c40f; font-size:40px; text-shadow:0 0 20px #f1c40f">ENHORABUENA</h1>
+            <p style="font-size:20px; margin: 20px 0;">Te has pasado este juego super difícil.<br>Espero que lo hayas disfrutado.</p>
+            <div style="font-size:12px; color:#888; margin-top:30px;">Made by JUFEGAAM</div>
+            <button onclick="window.location.href='Core-Debt/ending.html'" style="margin-top:20px; background:#f1c40f; color:#000;">FINISH HIM</button>
+        `;
   document.getElementById('message-text').innerHTML = msg;
   document.getElementById('modal-overlay').style.display = 'flex';
   document.getElementById('message-box').style.display = 'block';
-  document.getElementById('msg-btn').style.display = 'none'; 
+  document.getElementById('msg-btn').style.display = 'none';
   document.getElementById('upgrade-container').style.display = 'none';
   document.getElementById('typing-display').style.display = 'none';
-
-  document.getElementById('finish-him-btn').onclick = function() {
-    window.location.href = "ending.html";
-  };
 }
 
 function updateBossUI() {
@@ -677,17 +684,17 @@ function gameLoop() {
   }
   loopId = requestAnimationFrame(gameLoop);
 }
-
+// Here we handle the drawing of all elements in the canvas
 function draw() {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // We reset the transformation matrix to clear the canvas correctly
   ctx.fillStyle = "#050a14";
   ctx.fillRect(0, 0, world.width, world.height);
   const dpr = window.devicePixelRatio || 1;
   ctx.scale(dpr, dpr);
   const viewCX = window.innerWidth / 2 + shakeOffset.x;
   const viewCY = window.innerHeight / 2 + shakeOffset.y;
-  ctx.translate(viewCX, viewCY);
-  ctx.scale(zoom, zoom);
+  ctx.translate(viewCX, viewCY); // We apply the camera position
+  ctx.scale(zoom, zoom); // We apply the zoom level
   ctx.translate(-camera.x, -camera.y);
   drawGrid();
   if (gameStarted) {
@@ -723,6 +730,7 @@ function drawDirectionX() {
   ctx.fillText("LEFT", -350, 0);
   ctx.fillText("RIGHT", 350, 0);
 }
+// Function to draw the background grid lines
 function drawGrid() {
   ctx.strokeStyle = "#1e2a38";
   ctx.lineWidth = 1.5 / zoom;
@@ -901,20 +909,8 @@ function nextMission() {
   const types = ['wood', 'wood', 'copper', 'iron', 'silver', 'gold'];
   let maxIdx = Math.min(Math.floor(mission.difficulty / 2) + 1, types.length);
   const nextType = types[Math.floor(Math.random() * maxIdx)];
-
-  // --- CONFIGURACIÓN DE TIEMPO AJUSTADA ---
-  const tiempoInicial = 25;      
-  const tiempoMinimo = 13;       
-  const reduccionPorNivel = 0.18; 
-
-  const tiempoCalculado = tiempoInicial - (mission.totalCompleted * reduccionPorNivel);
-  const tiempoFinal = Math.max(tiempoMinimo, tiempoCalculado);
-
-  // --- RECURSOS: Escalado incremental agresivo para niveles altos ---
-  // Fórmula: Base (5) + Crecimiento lineal (Nivel*5) + Exponencial suave (Nivel^1.4 * 0.2)
-  const cantidadRecursos = Math.floor(5 + mission.totalCompleted * 5 + Math.pow(mission.totalCompleted, 1.4) * 0.2);
-
-  startMission(nextType, cantidadRecursos, tiempoFinal);
+  // HARD MODE: Less time for missions
+  startMission(nextType, 5 + (mission.difficulty * 3), Math.max(15, 30 - (mission.difficulty * 1)));
 }
 
 function mineAt(wx, wy) {
@@ -1162,7 +1158,7 @@ window.addEventListener('mousedown', e => {
     world.style.cursor = "grabbing";
   }
   else if (e.button === 0) {
-    if (isUpgradeMenuOpen || isMenuOpen || document.getElementById('start-screen').style.display !== 'none') {
+    if (isUpgradeMenuOpen || document.getElementById('start-screen').style.display !== 'none') {
       return;
     }
     const mx = e.clientX;
