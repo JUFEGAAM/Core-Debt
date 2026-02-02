@@ -40,7 +40,7 @@ let boss = {
   minigameType: null, minigameActive: false,
   minigameTimer: 0, minigameMaxTimer: 0,
   currentWord: "", typedIndex: 0, wordsRemaining: 0,
-  tauntTimer: 0
+  tauntTimer: 0, scale: 0.1
 };
 
 let aimTargets = [];
@@ -151,9 +151,11 @@ function finishLore() {
 /* === MAIN LOGIC === */
 
 function startGame(startLevel) {
+  // Solo mostramos historia si es el inicio normal (Nivel 0)
   if (startLevel === 0) {
     showLore(0);
   } else {
+    // Si son trucos o cargar partida, saltamos historia
     document.getElementById('start-screen').style.display = 'none';
     gameStarted = true;
     isPaused = false;
