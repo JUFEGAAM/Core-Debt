@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Core Debt - Unit Tests</title>
+    <style>
+        body { font-family: 'Consolas', monospace; background: #1e1e1e; color: #ccc; padding: 20px; }
+        h1 { color: #48dbfb; border-bottom: 2px solid #48dbfb; padding-bottom: 10px; }
+        .test-box { background: #252526; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .pass { color: #2ecc71; margin: 5px 0; font-weight: bold; }
+        .fail { color: #e74c3c; font-weight: bold; margin: 5px 0; background: rgba(231,76,60,0.1); padding: 5px; }
+        #game-mock-wrapper { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="test-box">
+        <h1>🛠️ Core Debt: Test Runner</h1>
+        <div id="results">Iniciando motor de pruebas...</div>
+    </div>
+
+    <div id="game-mock-wrapper">
+        <canvas id="world"></canvas>
+        <div id="ui-layer">
+            <span id="hp-container"></span><span id="cap-display"></span><div id="cap-warning"></div>
+            <span id="level-display"></span><span id="power-display"></span><span id="luck-display"></span>
+            <span id="mission-count"></span><div id="xp-fill"></div><div id="xp-text"></div>
+            <span id="count-wood"></span><span id="count-iron"></span><span id="count-copper"></span>
+            <span id="count-silver"></span><span id="count-gold"></span>
+            <div id="mission-panel"><div id="mission-title"></div><div id="mission-desc"></div><div id="mission-timer"></div></div>
+            <div id="boss-ui-container">
+                <div id="boss-title"></div><div id="boss-hp-fill"></div><div id="boss-timer-fill"></div>
+                <div id="boss-minigame-fill"></div><div id="boss-timer-bar"></div><div id="boss-minigame-bar"></div>
+                <div id="hp-markers-container"></div>
+            </div>
+            <div id="minigame-text-overlay"><div id="countdown-display"></div><div id="minigame-instruction"></div><div id="minigame-word"></div></div>
+            <div id="trash-tooltip"></div><div id="save-tooltip"></div>
+        </div>
+        <div id="start-screen"></div><div id="lore-screen"></div><div id="import-input"></div>
+        <div id="modal-overlay">
+            <div id="message-box"><div id="message-text"></div><button id="msg-btn"></button></div>
+            <div id="upgrade-container"></div><div id="typing-display"></div>
+        </div>
+    </div>
+
+    <script src="../Core-Debt/game.js"></script>
+
+    <script>
+        const results = document.getElementById('results');
+        let passed = 0, failed = 0;
+
+        // Función para resetear al jugador a estado de fábrica antes de cada test
+        function resetTestState() {
+            player = {
+                hp: 3, maxHp: 3, xp: 0, maxXp: 100, level: 1,
+                power: 1.0, capacity: 20, currentLoad: 0,
+                luck: 1.0, xpMultiplier: 1.0,
+                inventory: { wood: 0, iron: 0, copper: 0, silver: 0, gold: 0 }
+            };
+            mission.totalCompleted = 0;
+            boss.active = false;
+            isPaused = true; 
+        }
+
+        function assert(condition, desc) {
+            const div = document.createElement('div');
+            if (condition) {
+                div.className = 'pass';
+                div.innerHTML = `✅ PASS: ${desc}`;
+                passed++;
+            } else {
+                div.className = 'fail';
+                div.innerHTML = `❌ FAIL: ${desc}`;
+                failed++;
+            }
+            results.appendChild(div);
+        }
+
+        function runTests() {
+            results.innerHTML = '';
+            if (window.loopId) cancelAnimationFrame(window.loopId);
+
+            // --- TEST 1: INICIALIZACIÓN ---
+            resetTestState();
+            assert(player.hp === 3, "Salud inicial es 3");
+            assert(player.inventory.wood === 0, "Inventario empieza vacío");
+
+            // --- TEST 2: SISTEMA DE XP ---
+            resetTestState();
+            addXp(110); 
+            assert(player.level === 2, "Sube a nivel 2 al superar 100XP");
+            assert(player.xp === 10, "El sobrante (10) se mantiene");
+
+            // --- TEST 3: GESTIÓN DE CARGA ---
+            resetTestState();
+            player.currentLoad = 20; // Forzamos inventario lleno
+            const woodAntes = player.inventory.wood;
+            worldResources = [{x:0, y:0, type:'wood', amount:100, color:'#fff'}];
+            mineAt(5, 5); // Intentar minar
+            assert(player.inventory.wood === woodAntes, "No permite minar si el inventario está lleno");
+
+            // --- TEST 4: PROBABILIDAD (LUCK) ---
+            resetTestState();
+            // Para evitar que el azar nos fastidie el test, 
+            // forzamos el resultado de Math.random temporalmente
+            const realRandom = Math.random;
+            Math.random = () => 0.99; // Forzamos un número alto (buena tirada)
+            player.luck = 100; 
+            const upg = generateUpgradeStats({id:'test', name:'Test'});
+            assert(upg.rarity === 'legendary' || upg.rarity === 'epic', "Suerte alta genera items raros");
+            Math.random = realRandom; // Restauramos Math.random real
+
+            // --- TEST 5: SPAWN DE BOSS ---
+            resetTestState();
+            mission.totalCompleted = 10;
+            spawnBoss();
+            assert(boss.active === true, "El Boss aparece activo");
+            assert(boss.type === 'DEMIGOD', "Nivel 10 genera un DEMIGOD");
+
+            // --- TEST 6: DAÑO AL BOSS ---
+            resetTestState();
+            boss.active = true;
+            boss.immune = false;
+            boss.minigameActive = false;
+            boss.hp = 100;
+            player.power = 10;
+            clickBoss();
+            assert(boss.hp === 90, "Hacer click al boss le resta el daño del Power");
+
+            // RESUMEN
+            const summary = document.createElement('div');
+            summary.style.marginTop = "20px";
+            summary.style.borderTop = "1px solid #555";
+            summary.innerHTML = `<br><strong>RESULTADO FINAL:</strong> <span style="color:#2ecc71">${passed} Pasados</span>, <span style="color:#e74c3c">${failed} Fallados</span>`;
+            results.appendChild(summary);
+        }
+
+        setTimeout(runTests, 500);
+    </script>
+</body>
+</html>
