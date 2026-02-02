@@ -19,6 +19,10 @@ let isPaused = true;
 let shakeOffset = { x: 0, y: 0 };
 let loopId = null;
 
+// --- CORRECCIÓN: Variable para controlar el tiempo real ---
+let lastTime = 0;
+// ---------------------------------------------------------
+
 let player = {
   hp: 3, maxHp: 3, xp: 0, maxXp: 100, level: 1,
   power: 1.0, capacity: 20, currentLoad: 0,
@@ -60,7 +64,7 @@ let currentTypingTarget = null;
 let isUpgradeMenuOpen = false;
 let upgradeQueue = [];
 
-let loreLevelTarget = 0; // Variable para controlar la historia
+let loreLevelTarget = 0; 
 
 const BOSS_TAUNTS = {
   IDLE: ["TOO SLOW!", "I'M WAITING...", "TICK TOCK", "YOU'LL FAIL", "TRY HARDER"],
@@ -151,11 +155,9 @@ function finishLore() {
 /* === MAIN LOGIC === */
 
 function startGame(startLevel) {
-  // Solo mostramos historia si es el inicio normal (Nivel 0)
   if (startLevel === 0) {
     showLore(0);
   } else {
-    // Si son trucos o cargar partida, saltamos historia
     document.getElementById('start-screen').style.display = 'none';
     gameStarted = true;
     isPaused = false;
@@ -165,6 +167,9 @@ function startGame(startLevel) {
 
 function initGame(startLevel = 0) {
   if (loopId) cancelAnimationFrame(loopId);
+  
+  // Reseteamos el contador de tiempo para evitar saltos grandes
+  lastTime = 0; 
 
   resize();
   initWorld();
@@ -188,7 +193,8 @@ function initGame(startLevel = 0) {
     } else {
       nextMission();
     }
-    gameLoop();
+    // Iniciamos el loop pasando 0 o un timestamp inicial
+    loopId = requestAnimationFrame(gameLoop);
   });
 }
 
@@ -256,7 +262,7 @@ function attemptDelivery() {
     mission.delivered += amountInInv;
     player.currentLoad -= amountInInv;
     if (player.currentLoad < 0) player.currentLoad = 0;
-    coreHappyTimer = 60;
+    coreHappyTimer = 1.0; // Usamos segundos ahora (antes 60 frames)
     spawnParticles(0, 0, 20, RESOURCES[mission.type.toUpperCase()].color);
     spawnFloatingText(0, -80, "YUMMY!", "#48dbfb");
     updateUI();
@@ -284,7 +290,6 @@ function completeMission() {
   }
 }
 
-// === BOSS SPAWN (TIEMPOS AJUSTADOS) ===
 function spawnBoss() {
   boss.active = true;
   boss.immune = false;
@@ -334,7 +339,7 @@ function spawnBoss() {
   updateBossUI();
   spawnFloatingText(0, -150, "BOSS SPAWNED!", "#f00");
 
-  draw();
+  draw(0); // Dibujado inicial
 }
 
 function clickBoss() {
@@ -673,13 +678,24 @@ function updateBossUI() {
   }
 }
 
-function gameLoop() {
-  draw();
+// === ARREGLADO: GAME LOOP CON DELTA TIME ===
+function gameLoop(timestamp) {
+  // Configuración inicial del tiempo
+  if (!lastTime) lastTime = timestamp;
+  
+  // Calculamos Delta Time en segundos
+  const deltaTime = (timestamp - lastTime) / 1000;
+  lastTime = timestamp;
+  
+  // Limitamos dt para evitar saltos si se cambia de pestaña (máx 0.1s)
+  const dt = Math.min(deltaTime, 0.1); 
+
+  draw(dt); // Pasamos dt a la función de dibujo
+
   if (!isPaused && gameStarted) {
-    const dt = 1 / 60;
     shakeOffset = { x: 0, y: 0 };
     if (mission.active) {
-      mission.timeLeft -= dt;
+      mission.timeLeft -= dt; // Usamos dt real
       document.getElementById('mission-timer').innerText = mission.timeLeft.toFixed(1) + "s";
       if (mission.timeLeft <= 5.0) {
         const intensity = (5.0 - mission.timeLeft) * 2;
@@ -692,33 +708,40 @@ function gameLoop() {
       if (mission.timeLeft <= 0) failMission();
     }
     if (boss.active) checkBossTimer(dt);
+    
+    // Animaciones suaves ajustadas con dt
     const targetScale = isHoveringCore ? 1.2 : 1.0;
-    coreScale += (targetScale - coreScale) * 0.1;
-    if (boss.active && boss.scale < 1.0) boss.scale += 0.05;
-    if (coreHappyTimer > 0) coreHappyTimer--;
+    
+    // Lerp ajustado a tiempo: aprox 5.0 * dt es similar a 0.1 a 60fps
+    const lerpSpeed = 5.0 * dt; 
+    coreScale += (targetScale - coreScale) * lerpSpeed;
+    
+    if (boss.active && boss.scale < 1.0) boss.scale += 3.0 * dt;
+    if (coreHappyTimer > 0) coreHappyTimer -= dt;
   }
   loopId = requestAnimationFrame(gameLoop);
 }
-// Here we handle the drawing of all elements in the canvas
-function draw() {
-  ctx.setTransform(1, 0, 0, 1, 0, 0); // We reset the transformation matrix to clear the canvas correctly
+
+// === ARREGLADO: DRAW ACEPTA DT PARA ANIMACIONES VISUALES ===
+function draw(dt = 0) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); 
   ctx.fillStyle = "#050a14";
   ctx.fillRect(0, 0, world.width, world.height);
   const dpr = window.devicePixelRatio || 1;
   ctx.scale(dpr, dpr);
   const viewCX = window.innerWidth / 2 + shakeOffset.x;
   const viewCY = window.innerHeight / 2 + shakeOffset.y;
-  ctx.translate(viewCX, viewCY); // We apply the camera position
-  ctx.scale(zoom, zoom); // We apply the zoom level
+  ctx.translate(viewCX, viewCY); 
+  ctx.scale(zoom, zoom); 
   ctx.translate(-camera.x, -camera.y);
   drawGrid();
   if (gameStarted) {
     if (!boss.active) drawCore();
     if (boss.active) drawBoss();
     drawResources();
-    drawParticles();
-    drawFloatingTexts();
-    drawSpeechBubbles();
+    drawParticles(dt);     // Pasamos dt
+    drawFloatingTexts(dt); // Pasamos dt
+    drawSpeechBubbles(dt); // Pasamos dt
     if (boss.minigameActive) {
       if (boss.minigameType === 'AIM') drawAimTargets();
       if (boss.minigameType === 'DIR') drawDirectionX();
@@ -745,7 +768,6 @@ function drawDirectionX() {
   ctx.fillText("LEFT", -350, 0);
   ctx.fillText("RIGHT", 350, 0);
 }
-// Function to draw the background grid lines
 function drawGrid() {
   ctx.strokeStyle = "#1e2a38";
   ctx.lineWidth = 1.5 / zoom;
@@ -822,7 +844,7 @@ function drawAimTargets() {
   });
   ctx.shadowBlur = 0;
 }
-function drawSpeechBubbles() {
+function drawSpeechBubbles(dt) {
   ctx.font = `bold ${14 / zoom}px 'Comic Sans MS', sans-serif`;
   ctx.textAlign = "center";
   for (let i = speechBubbles.length - 1; i >= 0; i--) {
@@ -840,8 +862,10 @@ function drawSpeechBubbles() {
     ctx.fill();
     ctx.fillStyle = "black";
     ctx.fillText(b.text, b.x, b.y + 5);
-    b.y -= 0.5;
-    b.life -= 0.02;
+    // Ajustado a tiempo (antes 0.5/frame, ahora 30*dt)
+    b.y -= 30 * dt; 
+    // Ajustado a tiempo (antes 0.02/frame, ahora 1.2*dt)
+    b.life -= 1.2 * dt; 
     if (b.life <= 0) speechBubbles.splice(i, 1);
   }
 }
@@ -876,7 +900,7 @@ function spawnParticles(x, y, count, color) {
     life: 1.0
   });
 }
-function drawParticles() {
+function drawParticles(dt) {
   for (let i = particles.length - 1; i >= 0; i--) {
     let p = particles[i];
     ctx.fillStyle = p.color;
@@ -885,9 +909,11 @@ function drawParticles() {
     ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
-    p.x += (0 - p.x) * 0.1;
-    p.y += (0 - p.y) * 0.1;
-    p.life -= 0.03;
+    // Interpolación
+    p.x += (0 - p.x) * (5.0 * dt);
+    p.y += (0 - p.y) * (5.0 * dt);
+    // Vida basada en tiempo (antes 0.03/frame, aprox 1.8*dt)
+    p.life -= 1.8 * dt;
     if (p.life <= 0) particles.splice(i, 1);
   }
 }
@@ -897,7 +923,7 @@ function spawnSpeechBubble(x, y, text) {
 function spawnFloatingText(x, y, text, color) {
   floatingTexts.push({ x, y, text, color, life: 1.0 });
 }
-function drawFloatingTexts() {
+function drawFloatingTexts(dt) {
   ctx.textAlign = "center";
   for (let i = floatingTexts.length - 1; i >= 0; i--) {
     let ft = floatingTexts[i];
@@ -906,8 +932,9 @@ function drawFloatingTexts() {
     ctx.font = `bold ${16 / zoom}px Arial`;
     ctx.fillText(ft.text, ft.x, ft.y);
     ctx.globalAlpha = 1;
-    ft.y -= 1 / zoom;
-    ft.life -= 0.02;
+    // Ajustado a tiempo
+    ft.y -= (60 / zoom) * dt; 
+    ft.life -= 1.2 * dt;
     if (ft.life <= 0) floatingTexts.splice(i, 1);
   }
 }
@@ -1199,4 +1226,5 @@ window.addEventListener('mouseup', () => { isDragging = false; });
 window.addEventListener('wheel', e => { zoom = Math.min(Math.max(zoom - e.deltaY * 0.001, 0.4), 1.6); }, { passive: false });
 
 resize();
-requestAnimationFrame(gameLoop);
+// Loop inicial
+loopId = requestAnimationFrame(gameLoop);

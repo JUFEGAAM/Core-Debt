@@ -9,11 +9,12 @@
         .test-box { background: #252526; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
         .pass { color: #2ecc71; margin: 5px 0; font-weight: bold; }
         .fail { color: #e74c3c; font-weight: bold; margin: 5px 0; background: rgba(231,76,60,0.1); padding: 5px; }
+        .error-banner { background: #c0392b; color: white; padding: 15px; border-radius: 5px; margin-bottom: 20px; display: none; }
         #game-mock-wrapper { display: none; }
     </style>
 </head>
 <body>
-
+    <div id="critical-error" class="error-banner"></div>
     <div class="test-box">
         <h1>🛠️ Core Debt: Test Runner</h1>
         <div id="results">Iniciando motor de pruebas...</div>
@@ -43,36 +44,28 @@
         </div>
     </div>
 
-    <script src="../Core-Debt/game.js"></script>
+    <script>
+        window.onerror = function(msg, url, line) {
+            document.getElementById('critical-error').style.display = 'block';
+            document.getElementById('critical-error').innerHTML = `<strong>⚠️ ERROR CRÍTICO:</strong> ${msg}<br>Comprueba que game.js esté en la carpeta anterior (../game.js).`;
+        };
+    </script>
+
+    <script src="../game.js"></script>
 
     <script>
         const results = document.getElementById('results');
         let passed = 0, failed = 0;
 
-        // Función para resetear al jugador a estado de fábrica antes de cada test
         function resetTestState() {
-            player = {
-                hp: 3, maxHp: 3, xp: 0, maxXp: 100, level: 1,
-                power: 1.0, capacity: 20, currentLoad: 0,
-                luck: 1.0, xpMultiplier: 1.0,
-                inventory: { wood: 0, iron: 0, copper: 0, silver: 0, gold: 0 }
-            };
-            mission.totalCompleted = 0;
-            boss.active = false;
-            isPaused = true; 
+            player = { hp: 3, maxHp: 3, xp: 0, maxXp: 100, level: 1, power: 1.0, capacity: 20, currentLoad: 0, luck: 1.0, xpMultiplier: 1.0, inventory: { wood: 0, iron: 0, copper: 0, silver: 0, gold: 0 } };
+            mission.totalCompleted = 0; boss.active = false; isPaused = true; 
         }
 
         function assert(condition, desc) {
             const div = document.createElement('div');
-            if (condition) {
-                div.className = 'pass';
-                div.innerHTML = `✅ PASS: ${desc}`;
-                passed++;
-            } else {
-                div.className = 'fail';
-                div.innerHTML = `❌ FAIL: ${desc}`;
-                failed++;
-            }
+            if (condition) { div.className = 'pass'; div.innerHTML = `✅ PASS: ${desc}`; passed++; }
+            else { div.className = 'fail'; div.innerHTML = `❌ FAIL: ${desc}`; failed++; }
             results.appendChild(div);
         }
 
@@ -80,61 +73,38 @@
             results.innerHTML = '';
             if (window.loopId) cancelAnimationFrame(window.loopId);
 
-            // --- TEST 1: INICIALIZACIÓN ---
             resetTestState();
             assert(player.hp === 3, "Salud inicial es 3");
             assert(player.inventory.wood === 0, "Inventario empieza vacío");
 
-            // --- TEST 2: SISTEMA DE XP ---
-            resetTestState();
-            addXp(110); 
+            resetTestState(); addXp(110);
             assert(player.level === 2, "Sube a nivel 2 al superar 100XP");
             assert(player.xp === 10, "El sobrante (10) se mantiene");
 
-            // --- TEST 3: GESTIÓN DE CARGA ---
-            resetTestState();
-            player.currentLoad = 20; // Forzamos inventario lleno
-            const woodAntes = player.inventory.wood;
+            resetTestState(); player.currentLoad = 20; const woodAntes = player.inventory.wood;
             worldResources = [{x:0, y:0, type:'wood', amount:100, color:'#fff'}];
-            mineAt(5, 5); // Intentar minar
+            mineAt(5, 5); 
             assert(player.inventory.wood === woodAntes, "No permite minar si el inventario está lleno");
 
-            // --- TEST 4: PROBABILIDAD (LUCK) ---
             resetTestState();
-            // Para evitar que el azar nos fastidie el test, 
-            // forzamos el resultado de Math.random temporalmente
-            const realRandom = Math.random;
-            Math.random = () => 0.99; // Forzamos un número alto (buena tirada)
-            player.luck = 100; 
+            const realRandom = Math.random; Math.random = () => 0.99; player.luck = 100;
             const upg = generateUpgradeStats({id:'test', name:'Test'});
-            assert(upg.rarity === 'legendary' || upg.rarity === 'epic', "Suerte alta genera items raros");
-            Math.random = realRandom; // Restauramos Math.random real
+            assert(upg.rarity === 'legendary' || upg.rarity === 'epic', "Suerte alta genera items raros (Mocked Random)");
+            Math.random = realRandom;
 
-            // --- TEST 5: SPAWN DE BOSS ---
-            resetTestState();
-            mission.totalCompleted = 10;
-            spawnBoss();
+            resetTestState(); mission.totalCompleted = 10; spawnBoss();
             assert(boss.active === true, "El Boss aparece activo");
             assert(boss.type === 'DEMIGOD', "Nivel 10 genera un DEMIGOD");
 
-            // --- TEST 6: DAÑO AL BOSS ---
-            resetTestState();
-            boss.active = true;
-            boss.immune = false;
-            boss.minigameActive = false;
-            boss.hp = 100;
-            player.power = 10;
+            resetTestState(); boss.active = true; boss.immune = false; boss.minigameActive = false; boss.hp = 100; player.power = 10;
             clickBoss();
             assert(boss.hp === 90, "Hacer click al boss le resta el daño del Power");
 
-            // RESUMEN
             const summary = document.createElement('div');
-            summary.style.marginTop = "20px";
-            summary.style.borderTop = "1px solid #555";
+            summary.style.marginTop = "20px"; summary.style.borderTop = "1px solid #555";
             summary.innerHTML = `<br><strong>RESULTADO FINAL:</strong> <span style="color:#2ecc71">${passed} Pasados</span>, <span style="color:#e74c3c">${failed} Fallados</span>`;
             results.appendChild(summary);
         }
-
         setTimeout(runTests, 500);
     </script>
 </body>
