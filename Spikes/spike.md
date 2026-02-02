@@ -22,170 +22,27 @@ Ok, first I think what fits best is a "canvas", it's an html element used to pai
 
 Now there are several things that would be interesting to implement so the world makes more sense than just a blank rectangle. For example I would start by making the world have a grid, basically boxes of a fixed size like a chess board that will help differentiate the parts of the map since moving on a white background is kinda like doing nothing. Then it would be good to paint squares or any simple shape that for now will be the resource ores or trees for example, and lastly make it so we can move around the world we created, so let's go step by step:
 
-### World Grid
+### World Grid & DPI Fix
 
-Ok so to start we would have to do the initial canvas config like I said before and from there we continue with JavaScript:
+Ok so to start we would have to do the initial canvas config like I said before and from there we continue with JavaScript. 
 
-```html
-<canvas id="world" height="500" width="500"></canvas>
-```
-
-Now we won't see anything because the canvas is blank by default, now let's go with the JavaScript:
-
-First we give it the initial parameters so it identifies the canvas and understands that we want it to paint things in 2D:
-  
-```html
-<script>
-  let world = document.getElementByID("world"); // We create the value "world" that points to the ID of the canvas
-  const ctx = world.getContext("2d"); // We tell it that we want the canvas context to be 2D
-</script>
-```
-
-With this function we are gonna do, what we achieve is creating our first grid, basically we are telling it where we want it to draw the lines from, with what spacing and what size so we form a grid across the whole canvas.
-
-```javascript
-function drawGrid(lineWidth, cellWidth, cellHeight, color) {
-  // Line properties
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-
-  // Get size
-  let width = world.width;
-  let height = world.height;
-
-  // Draw vertical lines
-  for (let x = 0; x <= width; x += cellWidth) {
-    ctx.beginPath(); // From here the line will be drawn
-    ctx.moveTo(x, 0); // We move the starting point to 0 on the x and y axes
-    ctx.lineTo(x, height); // We stay on x and go up to where we put the "height" value
-    ctx.stroke(); // With this we make sure that every time a line is drawn it has the separation we put in the "cellWidth" value
-  }
-
-  // Draw horizontal lines
-  for (let y = 0; y <= height; y += cellHeight) {
-    ctx.beginPath();
-    ctx.moveTo(y, 0);
-    ctx.lineTo(width, y);
-    ctx.stroke();
-  }
-}
-drawGrid(1, 20, 20, "#000");
-```
-
-Well once we've done this we already see our first grid but there is a problem, if you look closely for some reason the lines look blurry, that is because the canvas element itself uses a very low DPI (dots per inch) setting which for old screens would be perfect but nowadays screens are much more powerful. What screens do is called Down Sampling and it's what happens when a screen with a higher resolution renders something with very low graphics, to fix that we do this.
+One big problem I found is that canvas lines look blurry on modern screens because of low DPI. To fix that, I created the `accountForDPI()` function. It gets the `devicePixelRatio` and scales the canvas context so everything looks sharp.
 
 ```javascript
 function accountForDPI() {
-  const dpr = window.devicePixelRatio || 1; // With this we get how many pixels are drawn for each physical pixel, if nothing is obtained the value will be 1
-  const rect = world.getBoundingClientRect(); // We get the canvas size in CSS because apparently the size we see can be different from the one registered by CSS
-
-// With this we make the internal size of the canvas adapt to the value we get from the dpr of each screen
+  const dpr = window.devicePixelRatio || 1;
+  const rect = world.getBoundingClientRect();
   world.width = rect.width * dpr;
   world.height = rect.height * dpr;
   ctx.scale(dpr, dpr);
-
-// Now keeping the scaling for the dpr that touches it we put the real size of the canvas since without this everything would look too big
+  // We also translate by 0.5 to align lines to the pixel grid and avoid blur
+  ctx.translate(0.5, 0.5); 
   world.style.width = `${rect.width}px`;
   world.style.height = `${rect.height}px`;
 }
-accountForDPI();
 ```
 
-Ok, I've identified 2 problems that were making the grid not draw correctly.
-
-To start I changed the place where I was calling the `drawGrid` function making it so `accountForDPI` is called first and then the grid is drawn with `drawGrid`. This way we manage to actually draw the grid because before it wasn't doing it because for some reason if logically getting the DPI was painted first and then physically painted with the `drawGrid` function it stayed blank.
-
-Then I realized that the lines looked like too thick and kinda blurry, turns out if you paint the lines from 0 0 a mathematical problem comes up between the canvas and your monitor, if the instruction is paint a line at coordinate 10 10 if it were for the canvas it would be fine but the problem is that monitors are made of pixels that in the end are "little lightbulbs" that turn on and off but can't turn on halfway so the logic applied is painting the line at coordinate 9.5 and at 10.5 applying something called Anti-aliasing, it makes the 2 lines that want to form 1 black line paint with a grey so that makes it thicker and blurrier since it's not pure black. With this context change called `ctx.translate(0.5, 0.5);` we get everything to start drawing at 0.5 so when it's trying to paint at coordinate 10.5 what it's gonna do is paint from 10 to 11 and this way it doesn't look blurry because they are 100% black and are in the same place, before they were painted on each side of the invisible dividing line that exists and that generated that problem.
-
-**The code for now would look like this:**
-
-```javascript
-<script>
-  let world = document.getElementById("world"); // We create the value "world" that points to the ID of the canvas
-  const ctx = world.getContext("2d"); // We tell it that we want the canvas context to be 2D
-
-  function drawGrid(lineWidth, cellWidth, cellHeight, color) {
-  // Line properties
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-
-  // Get size
-  let width = world.width;
-  let height = world.height;
-
-  // Draw vertical lines
-  for (let x = 0; x <= width; x += cellWidth) {
-    ctx.beginPath(); // From here the line will be drawn
-    ctx.moveTo(x, 0); // We move the starting point to 0 on the x and y axes
-    ctx.lineTo(x, height); // We stay on x and go up to where we put the "height" value
-    ctx.stroke(); // With this we make sure that every time a line is drawn it has the separation we put in the "cellWidth" value
-  }
-
-  // Draw horizontal lines
-  for (let y = 0; y <= height; y += cellHeight) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
-  }
-}
-// Formerly here was the drawGrid function that gave problems
-function accountForDPI() {
-  const dpr = window.devicePixelRatio || 1; // With this we get how many pixels are drawn for each physical pixel, if nothing is obtained the value will be 1
-  const rect = world.getBoundingClientRect(); // We get the canvas size in CSS because apparently the size we see can be different from the one registered by CSS
-
-// With this we make the internal size of the canvas adapt to the value we get from the dpr of each screen
-  world.width = rect.width * dpr;
-  world.height = rect.height * dpr;
-
-  ctx.scale(dpr, dpr);
-
-  ctx.translate(0.5, 0.5); /* With this we get the lines to paint at coordinate 0.5 instead of 0, this helps the lines paint the correct way because otherwise there comes a point where they overlap since they stay right in the middle of 2 coordinates for example it stays between 10.5 and 11.5 and what it does is paint two lines together which makes all lines look fatter and blurrier, but putting this simple variable fixes it. */
-
-// Now keeping the scaling for the dpr that touches it we put the real size of the canvas since without this everything would look too big
-  world.style.width = `${rect.width}px`;
-  world.style.height = `${rect.height}px`;
-}
-accountForDPI();
-drawGrid(1, 50, 50, "#000"); // By moving the function here we get the accountForDPI function to run first which is in charge of getting the monitor DPI rendering the page and then the grid is drawn, otherwise it corrupted and lines were not drawn
-</script>
-```
-
-Now what we have to do is add something that fixes the last problem for this first challenge of painting a grid, what happens is that the lines start, paint correctly respecting size and separation until it reaches the end and the grid boxes get cut off which looks really bad, so we would have to make it adjust correctly that's why we are going to investigate how.
-
-Proof of misaligned lines:
-
-<img src="../images/gridLines-misaligned.png" alt="Grid image with lines misaligned" width="300">
-
-Ok, after some time researching about this problem i've found what was making those rows and columns look cutted lets take a look:
-
-1. First we have something that wasn't the main problem but could make me go crazy if i didnt find out of it, its the css declaration "flex-shrink", by default is set to "1" which translates to "true" and that makes the grid to shrink when properties of the browser change like opening the browser console or zooming in or out, with "flex-shrink: 0;" we make the grid unshrinkable so it wont affect to our grid rows and columns.
-
-```css
-#world {
-  border: 2px solid black;
-  flex-shrink: 0; /*Makes the grid unshrinkable by the browser"*/
-  }
-```
-
-2. Second we deleted the function "world.getBoundingClientRect()", this function was calculating the size of the canvas at that moment so if you had zoom on your browser or just by the flexbox, the browser would get the result with decimals so you wont gent 700 but 699.6 or something like that, so what i made was create 2 const that where getting the widht and height directly from the canvas properties so now its a fixed number.
-
-```javascript
-const WORLD_WIDTH = parseInt(world.getAttribute("width"));
-const WORLD_HEIGHT = parseInt(world.getAttribute("height"));
-```
-
-I added these new values to all the places where i was calling width and height.
-
-Ok now it's almost perfect but now the variable we added before, the one that made so the starting point wasnt 0 but 0.5, its making the grid to be displaced 0.5 in both x and y axes so now i tried deleting that and now i finally got the PERFECT Grid.
-
-Grid with `ctx.translate(0.5, 0.5)`:
-
-<img src="../images/Starting-at-0.5.png" alt="Grid image with starting point at 0.5 in x and y axes" width="300">
-
-Grid without `ctx.translate(0.5, 0.5)`:
-
-<img src="../images/Full-Perfect-Drawn-Grid.png" alt="The Perfect Square Grid" width="300">
+***
 
 ## Functional World Grid
 
@@ -234,8 +91,112 @@ And for the grid to fit all the screen we need these ones.
 
 We have to delete the size attributes on the **<Canvas>** element because we want the new values to take the lead so the grid fits all the windows and we have to place those new values in all the functions without that nothing will work
 
-### Moving through the world
+### Moving through the world (Viewport & Zoom)
 
-Now we want to use the "viewport" to make our grid able to move and draw the grid at the same time so it looks like we are moving through a world.
+Now we want to use the "viewport" to make our grid able to move and draw the grid at the same time so it looks like we are moving through a world. 
 
+To achieve this, I implemented a `camera` object and a `zoom` variable. The logic is that the "world" is actually huge (around 5000x5000), but we only see a small "window" of it.
 
+1. **The Camera Transformation**: In the main `draw()` function, the secret is using `ctx.translate()` and `ctx.scale()` before drawing anything else. 
+2. **Centering the view**: First, we translate to the center of the screen so that zooming happens from the middle, not the top-left corner.
+
+**It looks like this in the code:**
+```javascript
+function draw() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); 
+  ctx.fillStyle = "#050a14";
+  ctx.fillRect(0, 0, world.width, world.height);
+  
+  const dpr = window.devicePixelRatio || 1;
+  ctx.scale(dpr, dpr);
+
+  const viewCX = window.innerWidth / 2 + shakeOffset.x;
+  const viewCY = window.innerHeight / 2 + shakeOffset.y;
+
+  ctx.translate(viewCX, viewCY); // Move to screen center
+  ctx.scale(zoom, zoom);         // Apply zoom level
+  ctx.translate(-camera.x, -camera.y); // Move to camera position
+
+  drawGrid();
+  // ... rest of game elements
+}
+```
+
+***One big problem I found:*** When you apply a zoom, the standard mouse coordinates (`e.clientX`) no longer match the coordinates in your drawing. I had to create a formula to "translate" the screen click back into world coordinates using `viewCX`, `zoom`, and `camera.x/y`. Without this, clicking on a resource while zoomed out was impossible!
+
+### Dragging with Right Click
+
+I decided to use the **Right Mouse Button** for movement to keep the Left Click free for farming. 
+- I used `window.addEventListener('mousemove', ...)` to track the delta (difference) between the current mouse position and the last one.
+- Then I simply add that delta to the camera coordinates.
+- I used `e.preventDefault()` on `contextmenu` so the browser menu doesn't pop up.
+
+```javascript
+if (isDragging) {
+  camera.x -= (mx - lastMousePos.x) / zoom;
+  camera.y -= (my - lastMousePos.y) / zoom;
+  lastMousePos = { x: mx, y: my };
+}
+```
+
+---
+
+## Procedural World Generation (Resource Patches)
+
+Instead of placing every resource by hand, I created an `initWorld()` function that populates the map using distance-based rarity.
+
+- **The logic**: Near the center, you mostly find **Wood**. As you move further away (calculated with `Math.sqrt(x*x + y*y)`), the code starts rolling for rarer materials like **Iron**, **Silver**, and **Gold**.
+- **Patches**: To make it look like biomes, I created `createPatch()`. It generates clusters of resources in a grid so they don't look like messy random dots.
+
+---
+
+## The Core: Our Greedy God
+
+In the absolute center `(0,0)`, I placed the **Core**. It’s a blue circle with a face representing the god we owe everything to.
+
+- **Happiness Animation**: I added a `coreHappyTimer`. When you deliver resources, the mouth changes to a happy smile for a few frames.
+- **Reactive UI**: The Core pulses and grows (`coreScale`) when you hover over it or interact with it.
+
+---
+
+## Mission & Panic System
+
+The game is structured into 67 levels. Each mission is a "Demand" from the Core.
+- **Panic Mode**: In `style.css`, I created a `pulse-red` animation. When `mission.timeLeft` is below 5 seconds, the UI flashes and the screen shakes to stress the player out.
+- **Ready Mode**: If you have enough resources in your inventory to complete the mission, the panel turns blue and starts pulsing to tell you: "GO TO THE CENTER NOW!"
+
+---
+
+## Boss Battles & Minigames
+
+Every 10 levels, a big Boss appears. They have a **Shield Mechanic**: at 66% and 33% HP, they become `immune` and trigger a random minigame.
+
+1. **AIM MAD**: Random targets spawn in world coordinates. You have to click them fast.
+2. **WRITING CRAZY**: The boss shows a tech word (like `SYSTEM` or `VOID`). You have to type it perfectly using the keyboard.
+3. **DIRECTIONS TO HELL**: The screen is divided into 4 sectors (TOP, BOTTOM, LEFT, RIGHT). One turns green, and you must type that direction.
+
+**Learning:** I added `BOSS_TAUNTS` so the boss insults you with speech bubbles like "TOO SLOW!" to make it feel more intense.
+
+---
+
+## Typing Upgrades
+
+To keep the game keyboard-centric, you choose upgrades by **typing their names** (e.g., typing "STORAGE" or "LUCK").
+- **Rarity Engine**: Cards range from Common to Legendary. The `player.luck` stat increases the chance of getting high-rarity cards with better stats.
+- **Visuals**: Legendary cards have a golden glow and a shake animation in CSS.
+
+---
+
+## Save & Load System
+
+Since level 67 is a long journey, I needed a persistence system.
+- **Exporting**: `exportSave()` converts the `player` object and level into a JSON string and generates a downloadable `.txt` file.
+- **Importing**: I use the `FileReader` API to read the text file and restore the player stats and progress instantly.
+
+---
+
+## Final UI & Juice
+
+- **Trash Can**: A vital feature. If your inventory is full of things the god doesn't want, you can **Right-Click** the trash icon to empty it.
+- **Floating Text & Particles**: Every action (mining, delivering, taking damage) spawns floating indicators and particles to make the game feel "juicy" and responsive.
+- **The Ending**: If you defeat the God at level 67, the game redirects to `ending.html` for the final victory message.

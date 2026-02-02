@@ -60,6 +60,8 @@ let currentTypingTarget = null;
 let isUpgradeMenuOpen = false;
 let upgradeQueue = [];
 
+let loreLevelTarget = 0; // Variable para controlar la historia
+
 const BOSS_TAUNTS = {
   IDLE: ["TOO SLOW!", "I'M WAITING...", "TICK TOCK", "YOU'LL FAIL", "TRY HARDER"],
   AIM: ["NO REFLEXES?", "MISSED ME!", "BLIND?", "TOO SLOW!", "LOOK HERE!"],
@@ -132,13 +134,31 @@ function startGameWithSave(data) {
   spawnFloatingText(0, -200, "GAME LOADED!", "#27ae60");
 }
 
+/* === LORE FUNCTIONS === */
+function showLore(targetLevel) {
+  loreLevelTarget = targetLevel;
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('lore-screen').style.display = 'flex';
+}
+
+function finishLore() {
+  document.getElementById('lore-screen').style.display = 'none';
+  gameStarted = true;
+  isPaused = false;
+  initGame(loreLevelTarget);
+}
+
 /* === MAIN LOGIC === */
 
 function startGame(startLevel) {
-  document.getElementById('start-screen').style.display = 'none';
-  gameStarted = true;
-  isPaused = false;
-  initGame(startLevel);
+  if (startLevel === 0) {
+    showLore(0);
+  } else {
+    document.getElementById('start-screen').style.display = 'none';
+    gameStarted = true;
+    isPaused = false;
+    initGame(startLevel);
+  }
 }
 
 function initGame(startLevel = 0) {
@@ -262,8 +282,7 @@ function completeMission() {
   }
 }
 
-// === BOSS SPAWN (TIEMPOS AJUSTADOS LEVEMENTE) ===
-// He subido unos 0.5s - 1.0s los tiempos base del boss para dar un respiro
+// === BOSS SPAWN (TIEMPOS AJUSTADOS) ===
 function spawnBoss() {
   boss.active = true;
   boss.immune = false;
@@ -279,18 +298,16 @@ function spawnBoss() {
   if (mission.totalCompleted === 67) {
     boss.type = "GOD";
     boss.maxHp = 2500;
-    boss.maxTimer = 17.0; // Antes 16.0
+    boss.maxTimer = 17.0; 
     document.getElementById('boss-title').style.color = "#f1c40f";
   } else if (mission.totalCompleted % 10 === 0) {
     boss.type = "DEMIGOD";
     boss.maxHp = (40 + (mission.totalCompleted * 10)) * 2.0;
-    // Antes 8.0 y 11.0 -> Ahora 8.5 y 11.5
     boss.maxTimer = Math.max(8.5, 11.5 - (mission.totalCompleted * 0.12)); 
     document.getElementById('boss-title').style.color = "#e74c3c";
   } else {
     boss.type = "MINION";
     boss.maxHp = 30 + (mission.totalCompleted * 8);
-    // Antes 7.0 y 10.0 -> Ahora 7.5 y 10.5
     boss.maxTimer = Math.max(7.5, 10.5 - (mission.totalCompleted * 0.12));
     document.getElementById('boss-title').style.color = "#e67e22";
   }
@@ -398,8 +415,7 @@ function startMinigameCountdown(newPhase) {
   }, 800);
 }
 
-// === MINIGAMES LOGIC (RELAJADO UN POQUITO EL ESTRÉS) ===
-// He subido unos 0.2s - 0.3s los tiempos mínimos y base.
+// === MINIGAMES LOGIC ===
 function activateMinigameLogic() {
   boss.immune = false;
   boss.minigameActive = true;
@@ -411,7 +427,6 @@ function activateMinigameLogic() {
     const targets = Math.min(6, 4 + Math.floor(level / 10));
     spawnAimTargets(targets);
 
-    // AIM: Antes Max(3.8, 7.0) -> Ahora Max(4.0, 7.2)
     boss.minigameMaxTimer = Math.max(4.0, 7.2 - (level * 0.06));
     updateMinigameText("CLICK TARGETS");
     wordEl.style.display = "none";
@@ -420,7 +435,6 @@ function activateMinigameLogic() {
   } else if (boss.minigameType === 'WORD') {
     boss.wordsRemaining = 3 + Math.floor(level / 15);
 
-    // WORD: Antes Max(1.8, 4.2) -> Ahora Max(2.0, 4.4)
     boss.minigameMaxTimer = Math.max(2.0, 4.4 - (level * 0.04));
     nextBossWord();
     wordEl.style.display = "inline-block";
@@ -429,7 +443,6 @@ function activateMinigameLogic() {
   } else {
     boss.wordsRemaining = 5 + Math.floor(level / 10);
 
-    // DIR: Antes Max(1.8, 5.0) -> Ahora Max(2.0, 5.2)
     boss.minigameMaxTimer = Math.max(2.0, 5.2 - (level * 0.06));
     nextBossDirection();
     wordEl.style.display = "inline-block";
@@ -634,10 +647,10 @@ function winGame() {
   isPaused = true;
   if (loopId) cancelAnimationFrame(loopId);
   const msg = `
-            <h1 style="color:#f1c40f; font-size:40px; text-shadow:0 0 20px #f1c40f">ENHORABUENA</h1>
-            <p style="font-size:20px; margin: 20px 0;">Te has pasado este juego super difícil.<br>Espero que lo hayas disfrutado.</p>
+            <h1 style="color:#f1c40f; font-size:40px; text-shadow:0 0 20px #f1c40f">CONGRATULATIONS</h1>
+            <p style="font-size:20px; margin: 20px 0;">You survived the greed of the God.<br>Humanity is free... for now.</p>
             <div style="font-size:12px; color:#888; margin-top:30px;">Made by JUFEGAAM</div>
-            <button onclick="window.location.href='Core-Debt/ending.html'" style="margin-top:20px; background:#f1c40f; color:#000;">FINISH HIM</button>
+            <button onclick="window.location.href='ending.html'" style="margin-top:20px; background:#f1c40f; color:#000;">FINISH HIM</button>
         `;
   document.getElementById('message-text').innerHTML = msg;
   document.getElementById('modal-overlay').style.display = 'flex';
